@@ -12,6 +12,7 @@ import InfoTip from './InfoTip.vue';
 const mode = ref('split'); // 'split' | 'single'
 const metric = ref('log');
 
+// Initialize with explicit empty strings so Vue tracks the exact properties:
 const wide = ref({ text: '', name: '' });
 const battery = ref({ text: '', name: '' });
 const estimates = ref({ text: '', name: '' });
@@ -21,21 +22,47 @@ const loaded = ref(null);
 const warnings = ref([]);
 const errorMsg = ref('');
 
-const canRun = computed(() =>
-  mode.value === 'single' ? !!wide.value.text : !!battery.value.text && !!estimates.value.text
-);
+const canRun = computed(() => {
+  if (mode.value === 'single') {
+    return wide.value.text.length > 0;
+  }
+  return battery.value.text.length > 0 && estimates.value.text.length > 0;
+});
 
 // --- file handling -------------------------------------------------------
-async function readInto(target, fileList) {
-  const file = fileList && fileList[0];
+async function processFile(file, targetRef) {
   if (!file) return;
-  target.value = { text: await file.text(), name: file.name };
+  try {
+    const content = await file.text();
+    // Mutate properties explicitly to guarantee computed triggers:
+    targetRef.value.text = content;
+    targetRef.value.name = file.name;
+    console.log(`Successfully loaded ${file.name} (${content.length} bytes)`);
+  } catch (err) {
+    console.error("File reading failed:", err);
+    errorMsg.value = `Failed to read file: ${err.message}`;
+  }
 }
-function pickFile(target, e) {
-  readInto(target, e.target.files);
+
+function handleBatteryPick(e) {
+  processFile(e.target?.files?.[0], battery);
 }
-function dropFile(target, e) {
-  readInto(target, e.dataTransfer && e.dataTransfer.files);
+function handleBatteryDrop(e) {
+  processFile(e.dataTransfer?.files?.[0], battery);
+}
+
+function handleEstimatesPick(e) {
+  processFile(e.target?.files?.[0], estimates);
+}
+function handleEstimatesDrop(e) {
+  processFile(e.dataTransfer?.files?.[0], estimates);
+}
+
+function handleWidePick(e) {
+  processFile(e.target?.files?.[0], wide);
+}
+function handleWideDrop(e) {
+  processFile(e.dataTransfer?.files?.[0], wide);
 }
 
 // --- run -----------------------------------------------------------------
@@ -117,26 +144,26 @@ const reading = computed(() => (report.value ? interpret(report.value).sentences
     <!-- inputs -->
     <div class="zones">
       <template v-if="mode === 'split'">
-        <label class="zone" @dragover.prevent @drop.prevent="dropFile(battery, $event)">
+        <label class="zone" @dragover.prevent @drop.prevent="handleBatteryDrop">
           <span class="zone-title">Battery</span>
           <span class="zone-hint">columns: id, truth, optional units / source / as_of</span>
           <span class="zone-file">{{ battery.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="pickFile(battery, $event)" />
+          <input type="file" accept=".csv,text/csv" @change="handleBatteryPick" />
         </label>
-        <label class="zone" @dragover.prevent @drop.prevent="dropFile(estimates, $event)">
+        <label class="zone" @dragover.prevent @drop.prevent="handleEstimatesDrop">
           <span class="zone-title">Estimates</span>
           <span class="zone-hint">columns: id, then one column per observer</span>
           <span class="zone-file">{{ estimates.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="pickFile(estimates, $event)" />
+          <input type="file" accept=".csv,text/csv" @change="handleEstimatesPick" />
         </label>
       </template>
 
       <template v-else>
-        <label class="zone wide" @dragover.prevent @drop.prevent="dropFile(wide, $event)">
+        <label class="zone wide" @dragover.prevent @drop.prevent="handleWideDrop">
           <span class="zone-title">Single sheet</span>
           <span class="zone-hint">columns: id, truth, optional meta, then one column per observer</span>
           <span class="zone-file">{{ wide.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="pickFile(wide, $event)" />
+          <input type="file" accept=".csv,text/csv" @change="handleWidePick" />
         </label>
       </template>
     </div>
