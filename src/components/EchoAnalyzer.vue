@@ -31,8 +31,12 @@ async function readInto(target, fileList) {
   if (!file) return;
   target.value = { text: await file.text(), name: file.name };
 }
-const onPick = (target) => (e) => readInto(target, e.target.files);
-const onDrop = (target) => (e) => readInto(target, e.dataTransfer.files);
+function pickFile(target, e) {
+  readInto(target, e.target.files);
+}
+function dropFile(target, e) {
+  readInto(target, e.dataTransfer && e.dataTransfer.files);
+}
 
 // --- run -----------------------------------------------------------------
 function run() {
@@ -113,26 +117,26 @@ const reading = computed(() => (report.value ? interpret(report.value).sentences
     <!-- inputs -->
     <div class="zones">
       <template v-if="mode === 'split'">
-        <label class="zone" @dragover.prevent @drop.prevent="onDrop(battery)">
+        <label class="zone" @dragover.prevent @drop.prevent="dropFile(battery, $event)">
           <span class="zone-title">Battery</span>
           <span class="zone-hint">columns: id, truth, optional units / source / as_of</span>
           <span class="zone-file">{{ battery.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="onPick(battery)" />
+          <input type="file" accept=".csv,text/csv" @change="pickFile(battery, $event)" />
         </label>
-        <label class="zone" @dragover.prevent @drop.prevent="onDrop(estimates)">
+        <label class="zone" @dragover.prevent @drop.prevent="dropFile(estimates, $event)">
           <span class="zone-title">Estimates</span>
           <span class="zone-hint">columns: id, then one column per observer</span>
           <span class="zone-file">{{ estimates.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="onPick(estimates)" />
+          <input type="file" accept=".csv,text/csv" @change="pickFile(estimates, $event)" />
         </label>
       </template>
 
       <template v-else>
-        <label class="zone wide" @dragover.prevent @drop.prevent="onDrop(wide)">
+        <label class="zone wide" @dragover.prevent @drop.prevent="dropFile(wide, $event)">
           <span class="zone-title">Single sheet</span>
           <span class="zone-hint">columns: id, truth, optional meta, then one column per observer</span>
           <span class="zone-file">{{ wide.name || 'drop a CSV or click to choose' }}</span>
-          <input type="file" accept=".csv,text/csv" @change="onPick(wide)" />
+          <input type="file" accept=".csv,text/csv" @change="pickFile(wide, $event)" />
         </label>
       </template>
     </div>
