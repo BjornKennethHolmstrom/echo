@@ -52,9 +52,13 @@ Two input shapes, both producing the same internal result:
 ## What it tells you
 
 - **Three error levels** — *single observer*, *your ensemble* (measured), and the *independence ideal* (`σ²/N`). These are measured directly; no model assumption. The headline is the gap between your ensemble and the ideal, summarised as a **reduction factor**: "your ensemble cut error 1.0× where independence would have cut it 4×."
+- **Effective observers (N_eff)** — `N / (1 + (N−1)ρ)`, ρ translated into plain terms: how many genuinely independent observers your panel amounts to. "Four behaving like one" is the most legible version of the headline.
+- **A plain-language reading** — two to four sentences interpreting *your* specific numbers (how correlated, whether consulting more helps, the honest caveats), with on-demand tooltips on the jargon terms.
 - **ρ (mean pairwise)** with a **bootstrap 95% confidence interval** — the average correlation between any two observers' errors, and how uncertain that estimate is given your battery size.
 - **ρ (variance-implied)** — the correlation that explains the reduction you actually got. With clean data it matches the mean-pairwise figure.
-- **Tail check** — whether errors are *more* correlated on the extreme items than the central ones. Reported whichever way it comes out (in the original study, this secondary prediction did *not* hold — and the instrument is built to let you reproduce a null honestly).
+- **Tail check** — whether errors are *more* correlated on the extreme items than the central ones. Reported whichever way it comes out — a null is a real result, and so is its opposite.
+- **Correlation by domain** — when the battery carries a `category` column, ρ and the reduction factor per category, with monocultures (ρ > 0.9) flagged. This is the variety-gap view: a panel can be independent on one kind of question and an echo on another, which the global average hides.
+- **Observer portfolio** — the lowest-error weighting of the observers (a quadratic program over the measured error-covariance matrix). Under a non-negativity constraint, observers given weight ≈ 0 are redundant — you can stop querying them.
 - **Per-observer table** — each observer's bias, variance, and RMSE against truth.
 - **Notes** — data problems (duplicate ids, unmatched rows, missing cells) and analysis flags, surfaced rather than hidden.
 
@@ -73,13 +77,20 @@ The instrument separates the two on purpose. The bundled "Try example" is tuned 
 
 ```
 src/core/echo/
-  echo-core.js        pure statistics — no framework, no DOM, fully unit-tested
-  echo-core.spec.js
+  echo-core.js        pure statistics — correlation, variance decomposition, bootstrap, N_eff
   echo-load.js        CSV parsing + the two loaders, no dependencies
-  echo-load.spec.js
+  echo-interpret.js   plain-language reading of a report
+  echo-context.js     per-category (variety-gap) analysis
+  echo-portfolio.js   minimum-variance observer weighting (the QP)
+  *.spec.js           a test suite beside each module
 src/components/
-  EchoAnalyzer.vue    the UI: upload zones, run, results, notes
+  EchoAnalyzer.vue    the UI: upload, run, results, both panels
   EchoBarChart.vue    reusable Chart.js bar wrapper
+  EchoContext.vue     correlation-by-domain panel
+  EchoPortfolio.vue   interactive portfolio panel
+  InfoTip.vue         inline term tooltips
+scripts/
+  build-battery.js    pulls a sourced, dated battery from the World Bank API
 ```
 
 The split is deliberate. All the math and parsing live in pure functions that know nothing about Vue, so they can be tested in isolation, reasoned about, and extended (including by an LLM) without risk to the interface. The pipeline is just:
@@ -89,7 +100,7 @@ const { items, observers, estimates, warnings } = load(input);
 const report = analyze(items, estimates, { observers });
 ```
 
-**Planned (phase 2):** an *observer-portfolio optimizer*. Given the measured error-covariance matrix, which subset or weighting of observers minimises ensemble error? That is Markowitz portfolio optimisation with the error-covariance matrix standing in for the return-covariance matrix — a quadratic program operating on correlation you *measured* rather than independence you *assumed*.
+**The observer-portfolio optimizer** (`echo-portfolio.js`) is Markowitz portfolio optimisation with the error-covariance matrix standing in for the return-covariance matrix: minimise `wᵀΣw` subject to the weights summing to one. Unconstrained it has a closed form; with non-negativity it runs projected-gradient descent on the simplex and reports which observers are redundant. A bias penalty folds in as `Σ + λ·bbᵀ`. It operates on correlation you *measured* rather than independence you *assumed*.
 
 ---
 
@@ -102,6 +113,12 @@ npm run test:unit    # run the core + loader tests
 ```
 
 Open the app, click **Try example**, and the headline should land immediately: four observers, ρ ≈ 0.97, a reduction of about 1.0× against an ideal of 4×.
+
+To build a real battery, run `node scripts/build-battery.js` (Node 18+, no key needed); it writes `battery.csv` and an `estimates-template.csv` to fill with each observer's answers, then load both in split mode.
+
+### Deploying
+
+The app is a static SPA and deploys to GitHub Pages via a build-and-deploy Action. Set `base` in `vite.config.js` to the repo path (e.g. `'/echo/'`) so assets resolve under the project URL.
 
 ---
 
